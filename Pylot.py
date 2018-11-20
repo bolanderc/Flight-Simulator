@@ -84,9 +84,9 @@ def main():
         DD = False
 
     #DEFLECTION LIMITS FOR CONTROL SURFACES
-    d_ail = 15.
-    d_ele = 15.
-    d_rud = 15.
+    d_ail = np.deg2rad(15.)
+    d_ele = np.deg2rad(15.)
+    d_rud = np.deg2rad(15.)
 
     #clock object for tracking frames and timestep
     clock = pygame.time.Clock()
@@ -180,13 +180,11 @@ def main():
 
             # if joystick is being used, gets joystick input and creates control_state dicitonary
             if KEYBOARD == False:
-                control_state = {
-                    "aileron": (joy.get_axis(0)**3)*-d_ail,
-                    "elevator": (joy.get_axis(1)**3)*-d_ele,
-                    "rudder": (joy.get_axis(3)**3)*-d_rud,
-                    "throttle": (-joy.get_axis(2)+1.)*0.5,
-                    "flaps": 0.
-                    }
+                a_obj.controls = [(joy.get_axis(3)**3)*-d_ele,
+                                  (joy.get_axis(4)**3)*-d_ail,
+                                  (joy.get_axis(0)**3)*-d_rud,
+                                  (-joy.get_axis(1)+1.)*0.5]
+
             # if joystick is not being used, gets keyboard input and creates control_state dictionary
             else:
                 if UP == True and DOWN == False:
@@ -212,13 +210,13 @@ def main():
                 elif WW == False and SS == True and thr>=0.0:
                     thr -= 0.05
 
-                control_state = {
-                    "aileron": ail*d_ail,
-                    "elevator": ele*d_ele,
-                    "rudder": rud*d_rud,
-                    "throttle": thr,
-                    "flaps": 0.
-                    }
+            control_state = {
+                "aileron": np.rad2deg(a_obj.controls[1]),
+                "elevator": np.rad2deg(a_obj.controls[0]),
+                "rudder": np.rad2deg(a_obj.controls[2]),
+                "throttle": a_obj.controls[3],
+                "flaps": 0.
+                }
 
             #SIMULATION CALCULATIONS GO BELOW HERE FOR EACH TIME STEP
             #IT IS RECOMMENDED THAT YOU MAKE AN OBJECT FOR THE SIMULATION AIRCRAFT AND CREATE A FUNCTION IN SAID OBJECT TO CALCULATE THE NEXT TIME STEP.
@@ -232,7 +230,7 @@ def main():
             #INPUT POSITION, ORIENTATION, AND VELOCITY OF AIRCRAFT INTO THIS DICTIONARY WHICH WILL THEN UPDATE THE GRAPHICS
             aircraft_condition = {
                 "Position":a_obj.state_vars[6:9],#input position of form [x,y,z]
-                "Orientation":a_obj.state_vars[9:],#input orientation in quaternion form [e0,ex,ey,ez]
+                "Orientation":a_obj.state_vars[-4:],#input orientation in quaternion form [e0,ex,ey,ez]
                 "Velocity":a_obj.state_vars[:3] #input Velocity of form [u,v,w]
             }
             flight_data = {
@@ -251,15 +249,11 @@ def main():
                 "Gnd Speed":a_obj.V_now ,#feet/sec
                 "Gnd Track":0. ,#deg
                 "Climb":a_obj.climb, #feet/min
-#                "Throttle":control_state["throttle"]*100 ,#%
-#                "Elevator":control_state["elevator"] ,#deg
-#                "Ailerons":control_state["aileron"] ,#deg
-#                "Rudder":control_state["rudder"] ,#deg
-#                "Flaps":control_state["flaps"] ,#deg
-                "Throttle":a_obj.tau_o ,#%
-                "Elevator":a_obj.de_o ,#deg
-                "Ailerons":a_obj.da_o ,#deg
-                "Rudder":a_obj.dr_o ,#deg
+                "Throttle":control_state["throttle"]*100 ,#%
+                "Elevator":control_state["elevator"] ,#deg
+                "Ailerons":control_state["aileron"] ,#deg
+                "Rudder":control_state["rudder"] ,#deg
+                "Flaps":control_state["flaps"] ,#deg
                 "Flaps":0.,#deg
                 "Axial G-Force":0. ,#g's
                 "Side G-Force":0. ,#g's

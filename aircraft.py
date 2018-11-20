@@ -96,7 +96,7 @@ class Aircraft:
         self.const_den = True  # Flag for using constant density
         self.M = 0.0  # Mach Number
         self.state_vars = np.zeros(13)  # State variables
-        self.controls = np.zeros(3)  # Control in (elevator, aileron, rudder)
+        self.controls = np.zeros(4)  # Control in (elevator, aileron, rudder, throttle)
         self.de_ref = 0.0  # Initial elevator deflection (given)
         self.V_wind = np.zeros(3)  # 3 component wind vector
         self.g = 32.2  # Gravity (ft/s^2)
@@ -229,7 +229,6 @@ class Aircraft:
         pbar = temp_vars[3]*self.b_w/(2.0*V)
         qbar = temp_vars[4]*self.c_w/(2.0*V)
         rbar = temp_vars[5]*self.b_w/(2.0*V)
-        self.control(0.0)
         de = self.controls[0] - self.de_ref
         da = self.controls[1]
         dr = self.controls[2]
@@ -258,7 +257,7 @@ class Aircraft:
         self.F_M[3] = (norm_const*self.b_w*C_l)  # Aerodynamic rolling moment
         self.F_M[4] = (norm_const*self.c_w*Cm)  # Aerodynamic pitching moment
         self.F_M[5] = (norm_const*self.b_w*Cn)  # Aerodynamic yawing moment
-        self.thrust(0.0, temp_vars)
+        self.thrust(temp_vars)
 
     def mass_change(self, t):
         mass = self.W/self.g*t  # Mass as a function of time
@@ -267,10 +266,7 @@ class Aircraft:
     def wind(self, t):
         self.V_wind = np.zeros(3)*t  # Wind as a function of time
 
-    def control(self, t):
-        self.controls = [self.de_o, self.da_o, self.dr_o]
-
-    def thrust(self, t, temp_vars):
+    def thrust(self, temp_vars):
         """Describes contribution of thrust to aerodynamic forces
 
         Attributes
@@ -282,7 +278,7 @@ class Aircraft:
         """
         V = np.sqrt(temp_vars[0]**2 + temp_vars[1]**2 + temp_vars[2]**2)
         thrust = (self.T0 + self.T1*V + self.T2*(V**2))
-        self.T_F_M[0] = (self.tau_o*(self.rho/self.rho_0)**self.a)*thrust
+        self.T_F_M[0] = (self.controls[3]*(self.rho/self.rho_0)**self.a)*thrust
         self.T_F_M[1] = 0.0
         self.T_F_M[2] = 0.0
         self.T_F_M[3] = self.y_T_o*self.T_F_M[2] - self.z_T_o*self.T_F_M[1]
@@ -446,3 +442,44 @@ class Aircraft:
             self.elevation = theta_try_1
         else:
             self.elevation = theta_try_2
+
+    def geographic_coords(self, xyz):
+        delx = (xyz[0] - self.state_vars[6])
+        dely = (xyz[1] - self.state_vars[7])
+        delz = (xyz[2] - self.state_vars[8])
+        lat1 = self.latitude
+        long1 = self.longitude
+        H1 = self.state_vars[8]
+        CL = np.cos(lat1)
+        SL = np.sin(lat1)
+        d = np.sqrt(delx**2 + dely**2)
+        RE = 20888146.325  # feet
+        if d < 1e-14:
+            self.del_heading = 0
+        else:
+            theta = d/(RE + H1 - (delz/2))
+            CT = np.cos(theta)
+            ST = np.sin(theta)
+            psi_g1 = np.arctan2(dely, delx)
+            CP = np.cos(psi_g1)
+            SP = np.sin(psi_g1)
+            x_hat = CL*CT - SL*ST*CP
+            y_hat = ST*SP
+            z_hat = SL*CT + CL*ST*CP
+            x_hat_p = -CL*ST - SL*CT*CP
+            y_hat_p = CT*SP
+            z_hat_p = -SL*ST + CL*CT*CP
+            r_hat = np.sqrt(x_hat**2 + y_hat**2)
+            lat2 = np.arctan2(z_hat, r_hat)
+            long2 = self.longitude + np.arctan2(y_hat, x_hat)
+            C = x_hat**2*z_hat_p
+            S = (x_hat*y_hat_p -
+                 y_hat*x_hat_p)*(np.cos(lat2)**2)*(np.cos(long2 - long1))
+            self.del_heading = np.arctan2(S, C) - psi_g1
+            self.latitude = lat2
+            self.longitude = long2
+            self.heading += self.del_heading
+        flat_transform = np.array([-self.state_vars[12], -self.state_vars[11],
+                                   self.state_vars[10], self.state_vars[9]])
+        self.geo_quat = (np.cos(self.del_heading/2)*self.state_vars[-4:] +
+                         np.sin(self.del_heading/2)*flat_transform)

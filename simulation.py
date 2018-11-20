@@ -25,6 +25,8 @@ def load_file(filename, a_obj):
     a_obj.T2 = f['aircraft']['thrust']['T2']
     a_obj.a = f['aircraft']['thrust']['a']
     a_obj.V_o = f['initial']['airspeed']
+    a_obj.latitude = f['initial']['latitude']
+    a_obj.longitude = f['initial']['longitude']
     a_obj.altitude = f['initial']['altitude']
     a_obj.W = f['initial']['weight']
     a_obj.climb = np.deg2rad(f['initial']['climb'])
@@ -94,10 +96,11 @@ def initialize(a_obj):
 
 
 def run_sim(a_obj, dt):
-    guess = RK.classical_RK4(0.0, a_obj.state_vars, dt,
-                             a_obj.eq_o_st)
-    guess[-4:] = quat.NormalizeQuaternion(guess[-4:])
-    a_obj.state_vars = np.copy(guess)
+    states_p1 = RK.classical_RK4(0.0, a_obj.state_vars, dt,
+                                 a_obj.eq_o_st)
+    states_p1[-4:] = quat.NormalizeQuaternion(states_p1[-4:])
+    a_obj.geographic_coords(states_p1[6:9])
+    a_obj.state_vars = np.copy(states_p1)
     a_obj.V_now = np.sqrt(a_obj.state_vars[0]**2 + a_obj.state_vars[1]**2 +
                           a_obj.state_vars[2]**2)
     a_obj.alpha_now = np.arctan2(a_obj.state_vars[2], a_obj.state_vars[0])
