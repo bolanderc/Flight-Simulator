@@ -180,8 +180,8 @@ def main():
 
             # if joystick is being used, gets joystick input and creates control_state dicitonary
             if KEYBOARD == False:
-                a_obj.controls = [(joy.get_axis(3)**3)*-d_ele,
-                                  (joy.get_axis(4)**3)*-d_ail,
+                a_obj.controls = [(joy.get_axis(4)**3)*-d_ele,
+                                  (joy.get_axis(3)**3)*-d_ail,
                                   (joy.get_axis(0)**3)*-d_rud,
                                   (-joy.get_axis(1)+1.)*0.5]
 
@@ -237,7 +237,7 @@ def main():
                 "Graphics Time Step": t,#sec
                 "Physics Time Step": dt,#sec
                 "Airspeed": a_obj.V_now,#feet/sec
-                "AoA":a_obj.alpha_now ,#deg
+                "AoA":180.0*a_obj.alpha_now/np.pi ,#deg
                 "Sideslip": a_obj.beta_now ,#deg
                 "Altitude":-a_obj.state_vars[8] ,#feet
                 "Latitude":a_obj.state_vars[6] ,#deg

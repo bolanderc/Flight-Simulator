@@ -7,6 +7,7 @@ Created on Wed Nov  7 16:10:15 2018
 """
 import numpy as np
 import quat
+import sinesummationpredictivefit as sspf
 
 
 class Aircraft:
@@ -144,6 +145,51 @@ class Aircraft:
         self.alpha_now = 0.0
         self.beta_now = 0.0
 
+        # Stall function info
+        self.lift_harm = np.array([0.17859072917934823, -0.07248345270410542,
+                                   3.5977975693225983, -0.2944460267516742,
+                                   0.35502503880546615, 0.15928379602454928,
+                                   1.6280124562837064, 0.4188675587335609,
+                                   0.15000142067987532, -1.0351950351224948,
+                                   -0.11414628072644475, 0.5320454321104744,
+                                   -3.3584787932077718, 0.11239169561767533,
+                                   0.5351478844205443, -3.496292795037904,
+                                   0.12469142640224619, 0.3307382285934198,
+                                   -0.5136092446893241, -0.09026102778964513,
+                                   0.32760237122200186, -0.07838864008214545,
+                                   0.05086870475382469, 0.316754004989514,
+                                   2.695685512533336, 0.003806159758480122,
+                                   0.46349381856231586, 4.1941153120899335])
+        self.drag_harm = np.array([0.8363777771046972, 0.05607261204825764,
+                                   -2.066736811548836, 0.9859742310672537,
+                                   -0.02334009879216733, 0.14465061966162876,
+                                   7.489864417456017, 0.0019349242078232046,
+                                   0.24721149008108284, 3.622572373872043,
+                                   0.002868376584911978, 0.2615055600928204,
+                                   3.5981341652702126])
+        self.moment_harm = np.array([52.92082241831228, -0.032105581818538384,
+                                     5.91639070974744, 25.929194195431116,
+                                     26.687512645465382, 0.04654418631208993,
+                                     6.1118507894561445, 0.37039380836080416,
+                                     0.44729839464684906, -5.324502306324748,
+                                     -0.32559811265212146, 0.4571137063125297,
+                                     0.5400816636923348, -0.09736951119396256,
+                                     0.32335110070843776, -0.3979366252106608,
+                                     -0.04743656475920655, 0.2525902990728076,
+                                     -1.5643043113160358, 0.04380736976337287,
+                                     0.23034906159685087, 3.1286462992587913,
+                                     0.018942867031032762, 0.25383902374700557,
+                                     1.5858930918923535, 0.01382029662088026,
+                                     0.2650823400310552, -0.21623297906506603,
+                                     0.00217321622397017, 0.25831230629554036,
+                                     4.434087855207149, 0.0033921812834298757,
+                                     0.25374288882227963, 2.9926756007729227,
+                                     0.0013591716755926165, 0.3826355133114705,
+                                     3.237553222836382, 0.0016557163476443918,
+                                     0.25657835723378963, 4.122063652819904,
+                                     0.0031177793320597705, 0.3828902381837064,
+                                     3.812497232425366])
+
 
         """ For the arrow problem only. (11.14 in Phillips)"""
 #        self.l_r = 2.0  # Reference length
@@ -233,21 +279,39 @@ class Aircraft:
         da = self.controls[1]
         dr = self.controls[2]
         norm_const = 0.5*self.rho*self.S_w*V**2
-        CL = (self.CL_ref + self.CL_a*alpha + self.CL_q*qbar + self.CL_de*de)
-        CS = (self.CY_b*beta + self.CY_p*pbar + self.CY_r*rbar +
-              self.CY_da*da + self.CY_dr*dr)
-        CD = (self.C_D0 + self.C_D1*CL + self.C_D2*(CL**2) +
-              self.C_D3*(CS**2) +
-              self.CD_q*qbar + self.CD_de*de)
-        C_l = (self.Cll_b*beta + self.Cll_p*pbar +
-               (self.Cll_r/self.CL_ref)*CL*rbar + self.Cll_da*da +
-               self.Cll_dr*dr)
-        Cm = (self.Cm_ref +
-              (self.Cm_a/self.CL_a)*(CL*u/V - self.CL_ref + CD*w/V) +
-              self.Cm_q*qbar + self.Cm_de*de)
-        Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
-              (self.Cn_p/self.CL_ref)*CL*pbar + self.Cn_r*rbar +
-              self.Cn_da*da + self.Cn_dr*dr)
+        if alpha > 12.0*np.pi/180.:
+            CL = sspf.sum_sines(np.rad2deg(alpha), self.lift_harm,
+                                len(self.lift_harm))
+            CD = sspf.sum_sines(np.rad2deg(alpha), self.drag_harm,
+                                len(self.drag_harm))
+            Cm = sspf.sum_sines(np.rad2deg(alpha), self.moment_harm,
+                                len(self.moment_harm))
+            CS = (self.CY_b*beta + self.CY_p*pbar + self.CY_r*rbar +
+                  self.CY_da*da + self.CY_dr*dr)
+
+            C_l = (self.Cll_b*beta + self.Cll_p*pbar +
+                   (self.Cll_r/self.CL_ref)*CL*rbar + self.Cll_da*da +
+                   self.Cll_dr*dr)
+            Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
+                  (self.Cn_p/self.CL_ref)*CL*pbar + self.Cn_r*rbar +
+                  self.Cn_da*da + self.Cn_dr*dr)
+        else:
+            CL = (self.CL_ref + self.CL_a*alpha + self.CL_q*qbar +
+                  self.CL_de*de)
+            CS = (self.CY_b*beta + self.CY_p*pbar + self.CY_r*rbar +
+                  self.CY_da*da + self.CY_dr*dr)
+            CD = (self.C_D0 + self.C_D1*CL + self.C_D2*(CL**2) +
+                  self.C_D3*(CS**2) +
+                  self.CD_q*qbar + self.CD_de*de)
+            C_l = (self.Cll_b*beta + self.Cll_p*pbar +
+                   (self.Cll_r/self.CL_ref)*CL*rbar + self.Cll_da*da +
+                   self.Cll_dr*dr)
+            Cm = (self.Cm_ref +
+                  (self.Cm_a/self.CL_a)*(CL*u/V - self.CL_ref + CD*w/V) +
+                  self.Cm_q*qbar + self.Cm_de*de)
+            Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
+                  (self.Cn_p/self.CL_ref)*CL*pbar + self.Cn_r*rbar +
+                  self.Cn_da*da + self.Cn_dr*dr)
         self.F_M[0] = (norm_const*(CL*np.sin(alpha) - CS*np.sin(beta) -
                        CD*u/V))  # X aerodynamic force
         self.F_M[1] = (norm_const*(CS*np.cos(beta) -
