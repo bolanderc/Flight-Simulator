@@ -21,7 +21,7 @@
         "longitude" : 0.0,
         "altitude" : 500.0,
         "weight" : 2500.0,
-        "climb" : 20.0,
+        "climb" : 0.0,
         "bank" : 0.0,
         "heading" : 0.0
     },

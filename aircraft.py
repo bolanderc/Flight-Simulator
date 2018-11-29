@@ -222,18 +222,6 @@ class Aircraft:
                                      0.0031177793320597705, 0.3828902381837064,
                                      3.812497232425366])
 
-
-        """ For the arrow problem only. (11.14 in Phillips)"""
-#        self.l_r = 2.0  # Reference length
-#        self.rho = 2.0e-3  # Air density
-#        self.k0 = 0.0061  # Force/Moment coefficients
-#        self.k1 = 1.40
-#        self.k2 = 0.0059
-#        self.k3 = 0.0040
-#        self.k4 = 0.0080
-#        self.k5 = 0.00475
-#        self.C_lo = 0.00495
-
     def eq_o_st(self, t, y0):
         """Describes the equation of state for the aircraft.
 

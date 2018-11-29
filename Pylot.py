@@ -13,7 +13,8 @@ def main():
     pygame.init()
 
     #DISPLAY WINDOW SIZE. CHANGE TO SUIT YOUR SCREEN IF NECESSARY
-    width, height = 1800,900
+    width, height = 1680, 1050  # Desktop
+#    width, height = 1366, 768  # Laptop
     pygame.display.set_icon(pygame.image.load('res/gameicon.jpg'))
     screen = pygame.display.set_mode((width,height), HWSURFACE|OPENGL|DOUBLEBUF)
     pygame.display.set_caption("Pylot")
@@ -226,7 +227,6 @@ def main():
 
 
 
-
             #INPUT POSITION, ORIENTATION, AND VELOCITY OF AIRCRAFT INTO THIS DICTIONARY WHICH WILL THEN UPDATE THE GRAPHICS
             aircraft_condition = {
                 "Position":a_obj.state_vars[6:9],#input position of form [x,y,z]
@@ -253,7 +253,6 @@ def main():
                 "Elevator":control_state["elevator"] ,#deg
                 "Ailerons":control_state["aileron"] ,#deg
                 "Rudder":control_state["rudder"] ,#deg
-                "Flaps":control_state["flaps"] ,#deg
                 "Flaps":0.,#deg
                 "Axial G-Force":0. ,#g's
                 "Side G-Force":0. ,#g's
@@ -314,6 +313,8 @@ def main():
 
             #update screen display
             pygame.display.flip()
+#        np.savetxt('coeffs.csv', np.array([a_obj.alphas, a_obj.CLs,
+#                                           a_obj.CDs, a_obj.Cms]).T, delimiter=',')
 
 
 if __name__ == "__main__":
