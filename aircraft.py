@@ -216,6 +216,9 @@ class Aircraft:
                                      0.0031177793320597705, 0.3828902381837064,
                                      3.812497232425366])
 
+        self.n_pll = 0.0
+        self.n_nll = 0.0
+
     def eq_o_st(self, t, y0):
         """Describes the equation of state for the aircraft.
 
@@ -536,7 +539,6 @@ class Aircraft:
         self.controls[2] = self.dr_o
         self.controls[3] = self.tau_o
 
-
     def climb_to_elevation(self, alpha, beta):
         SG = np.sin(self.climb)
         SP = np.sin(self.bank)
@@ -601,3 +603,6 @@ class Aircraft:
                                    self.state_vars[10], self.state_vars[9]])
         self.geo_quat = (np.cos(self.del_heading/2)*self.state_vars[-4:] +
                          np.sin(self.del_heading/2)*flat_transform)
+
+#    def load_calc(self):
+

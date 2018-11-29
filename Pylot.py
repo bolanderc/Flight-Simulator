@@ -8,6 +8,29 @@ import aircraft
 import simulation
 
 
+class Panel:
+    def __init__(self, screen_width=None):
+        self.screen_width = screen_width
+        glClearColor(0.,0.,0.,0.0)
+        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
+        self.pic = pygame.image.load("V-n diagram.png")
+
+    def draw(self):
+        pic = self.pic.copy()
+
+        if self.screen_width:
+            pic = pygame.transform.scale(pic, (600,400))
+        picData = pygame.image.tostring(pic,"RGBA",True)
+
+        position = (-0.4,0.25,0)
+
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)
+        glRasterPos3d(*position)
+        glDrawPixels(pic.get_width(), pic.get_height(),GL_RGBA, GL_UNSIGNED_BYTE, picData)
+        glDisable(GL_BLEND)
+
+
 def main():
     #initialize pygame module and set window
     pygame.init()
@@ -66,7 +89,7 @@ def main():
     dt = simulation.load_file('11.24_input.json', a_obj)
     simulation.initialize(a_obj)
 
-
+    panel = Panel(width)
 
     #initialize other pygame elements
     if pygame.joystick.get_count()>0.:
@@ -105,12 +128,17 @@ def main():
 
             if KEYBOARD == False:
                 if event.type == pygame.JOYBUTTONDOWN:
-                    if event.button ==2:
+                    if event.button == 2:
                         FPV = not FPV
                         cam.pos_storage.clear()
                         cam.up_storage.clear()
                         cam.target_storage.clear()
-
+                    if event.button == 7:
+                        PAUSE = not PAUSE
+                    if event.button == 5:
+                        a_obj.de_o += np.deg2rad(0.5)
+                    if event.button == 4:
+                        a_obj.de_o -= np.deg2rad(0.5)
             else:
                 if event.type == pygame.KEYDOWN:
 
@@ -181,10 +209,11 @@ def main():
 
             # if joystick is being used, gets joystick input and creates control_state dicitonary
             if KEYBOARD == False:
-                a_obj.controls = [(joy.get_axis(4)**3)*-d_ele,
+                a_obj.controls = [(joy.get_axis(4)**3)*-d_ele + a_obj.de_o,
                                   (joy.get_axis(3)**3)*-d_ail,
                                   (joy.get_axis(0)**3)*-d_rud,
                                   (-joy.get_axis(1)+1.)*0.5]
+
 
             # if joystick is not being used, gets keyboard input and creates control_state dictionary
             else:
@@ -290,8 +319,10 @@ def main():
 
                 graphics_aircraft.render()
                 field.render()
+                panel.draw()
                 if DATA == True:
                     data.render(flight_data)
+
 
 
             #cockpit view
@@ -313,13 +344,9 @@ def main():
 
             #update screen display
             pygame.display.flip()
-#        np.savetxt('coeffs.csv', np.array([a_obj.alphas, a_obj.CLs,
-#                                           a_obj.CDs, a_obj.Cms]).T, delimiter=',')
 
 
 if __name__ == "__main__":
     main()
-
-
 
 
