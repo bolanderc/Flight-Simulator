@@ -192,13 +192,7 @@ class Aircraft:
                                    0.18167331837262693, -0.2743318710331607,
                                    0.005846900217210234, 0.18140300938973017,
                                    1.1106188147721414])
-        self.drag_harm = np.array([0.863954596967555, 0.05221894483757261,
-                                   -1.9395159415231615, 0.9960369024250165,
-                                   -0.0080097134470388, 0.1840983100318056,
-                                   6.086767895480726, 0.0024894430857670268,
-                                   0.2349378415901038, 3.9475752598456033,
-                                   0.0023808925073181917, 0.262169499067505,
-                                   4.0043209332894705])
+        self.drag_harm = np.array([1.0, 0.043, np.pi - 0.1, 1.05])
         self.moment_harm = np.array([52.92082241831228, -0.032105581818538384,
                                      5.91639070974744, 25.929194195431116,
                                      26.687512645465382, 0.04654418631208993,
@@ -288,6 +282,9 @@ class Aircraft:
     def aerodynamics(self, temp_vars):
         alpha = np.arctan2(temp_vars[2], temp_vars[0])
         beta = np.arctan2(temp_vars[1], temp_vars[0])
+        a_control = 20*np.pi/180.
+        a_u = 12.0*np.pi/180.
+        a_l = 10.0*np.pi/180.
         u = temp_vars[0]
         v = temp_vars[1]
         w = temp_vars[2]
@@ -299,46 +296,78 @@ class Aircraft:
         da = self.controls[1]
         dr = self.controls[2]
         norm_const = 0.5*self.rho*self.S_w*V**2
-        if alpha > 12.0*np.pi/180.:
-            CL = sspf.sum_sines(np.rad2deg(alpha), self.lift_harm,
-                                len(self.lift_harm))
-            CD = sspf.sum_sines(np.rad2deg(alpha), self.drag_harm,
-                                len(self.drag_harm))
-            Cm = sspf.sum_sines(np.rad2deg(alpha), self.moment_harm,
-                                len(self.moment_harm))
-            CS = (self.CY_b*beta + self.CY_p*pbar + self.CY_r*rbar +
-                  self.CY_da*da + self.CY_dr*dr)
+        D = self.drag_harm
+        dragmod = D[0]*np.cos(D[1]*np.rad2deg(alpha) + D[2]) + D[3]
+        CS = (self.CY_b*beta + self.CY_p*pbar + self.CY_r*rbar +
+              self.CY_da*da + self.CY_dr*dr)
+        CLconst = (self.CL_ref + self.CL_q*qbar + self.CL_de*de)
+        CDconst = (self.C_D0 + self.C_D3*(CS**2) + self.CD_q*qbar +
+                   self.CD_de*de)
+        Cllconst = (self.Cll_b*beta + self.Cll_p*pbar + self.Cll_da*da +
+                    self.Cll_dr*dr)
+        Cmconst = (self.Cm_ref + self.Cm_q*qbar + self.Cm_de*de)
+        Cnconst = (self.Cn_r*rbar + self.Cn_da*da + self.Cn_dr*dr)
+        if alpha < a_l:
+            CL = CLconst + self.CL_a*alpha
+            CD = CDconst + self.C_D1*CL + self.C_D2*(CL**2)
+            C_ll = Cllconst + (self.Cll_r/self.CL_ref)*CL*rbar
+            Cm = (Cmconst +
+                  (self.Cm_a/self.CL_a)*(CL*u/V - self.CL_ref + CD*w/V))
+            Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
+                  (self.Cn_p/self.CL_ref)*CL*pbar + Cnconst)
+        if alpha >= a_l and alpha <= a_u:
+            weight = ((alpha - a_u)/(a_l - a_u))
+            CL = (CLconst + (1. - weight)*self.CL_a*alpha +
+                  weight*sspf.sum_sines(np.rad2deg(alpha), self.lift_harm,
+                                        len(self.lift_harm)))
+            CD = (CDconst + (1. - weight)*(self.C_D1*CL + self.C_D2*(CL**2)) +
+                  weight*(dragmod))
+            C_ll = Cllconst + (self.Cll_r/self.CL_ref)*CL*rbar
+            Cm = (Cmconst + (1. - weight)*((self.Cm_a/self.CL_a)*(CL*u/V -
+                                                                  self.CL_ref +
+                                                                  CD*w/V)) +
+                  weight*sspf.sum_sines(np.rad2deg(alpha), self.moment_harm,
+                                        len(self.moment_harm)))
+            Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
+                  (self.Cn_p/self.CL_ref)*CL*pbar + Cnconst)
+        if alpha > a_u:
+            if alpha > a_control:
+                CS = (self.CY_b*beta + self.CY_p*pbar + self.CY_r*rbar)
+                CLconst = (self.CL_ref + self.CL_q*qbar)
+                CDconst = (self.C_D0 + self.C_D3*(CS**2) + self.CD_q*qbar)
+                Cllconst = (self.Cll_b*beta + self.Cll_p*pbar)
+                Cmconst = (self.Cm_ref + self.Cm_q*qbar)
+                Cnconst = (self.Cn_r*rbar)
+            if alpha < np.deg2rad(60.):
+                CL = CLconst + sspf.sum_sines(np.rad2deg(alpha),
+                                              self.lift_harm,
+                                              len(self.lift_harm))
+                CD = CDconst + dragmod
+                C_ll = Cllconst + (self.Cll_r/self.CL_ref)*CL*rbar
+                Cm = Cmconst + sspf.sum_sines(np.rad2deg(alpha),
+                                              self.moment_harm,
+                                              len(self.moment_harm))
+                Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
+                      (self.Cn_p/self.CL_ref)*CL*pbar + Cnconst)
+            if alpha >= np.deg2rad(60.):
+                CL = (-0.45/30.)*np.rad2deg(alpha) + 1.3
+                if CDconst + dragmod > 2.0:
+                    CD = 2.0
+                else:
+                    CD = CDconst + dragmod
+                C_ll = Cllconst + (self.Cll_r/self.CL_ref)*CL*rbar
+                Cm = -0.6
+                Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
+                      (self.Cn_p/self.CL_ref)*CL*pbar + Cnconst)
 
-            C_l = (self.Cll_b*beta + self.Cll_p*pbar +
-                   (self.Cll_r/self.CL_ref)*CL*rbar + self.Cll_da*da +
-                   self.Cll_dr*dr)
-            Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
-                  (self.Cn_p/self.CL_ref)*CL*pbar + self.Cn_r*rbar +
-                  self.Cn_da*da + self.Cn_dr*dr)
-        else:
-            CL = (self.CL_ref + self.CL_a*alpha + self.CL_q*qbar +
-                  self.CL_de*de)
-            CS = (self.CY_b*beta + self.CY_p*pbar + self.CY_r*rbar +
-                  self.CY_da*da + self.CY_dr*dr)
-            CD = (self.C_D0 + self.C_D1*CL + self.C_D2*(CL**2) +
-                  self.C_D3*(CS**2) +
-                  self.CD_q*qbar + self.CD_de*de)
-            C_l = (self.Cll_b*beta + self.Cll_p*pbar +
-                   (self.Cll_r/self.CL_ref)*CL*rbar + self.Cll_da*da +
-                   self.Cll_dr*dr)
-            Cm = (self.Cm_ref +
-                  (self.Cm_a/self.CL_a)*(CL*u/V - self.CL_ref + CD*w/V) +
-                  self.Cm_q*qbar + self.Cm_de*de)
-            Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
-                  (self.Cn_p/self.CL_ref)*CL*pbar + self.Cn_r*rbar +
-                  self.Cn_da*da + self.Cn_dr*dr)
+        print(alpha, CL, CD, Cm)
         self.F_M[0] = (norm_const*(CL*np.sin(alpha) - CS*np.sin(beta) -
                        CD*u/V))  # X aerodynamic force
         self.F_M[1] = (norm_const*(CS*np.cos(beta) -
                        CD*v/V))  # Y aerodynamic force
         self.F_M[2] = (norm_const*(-CL*np.cos(alpha) -
                        CD*w/V))   # Z aerodynamic force
-        self.F_M[3] = (norm_const*self.b_w*C_l)  # Aerodynamic rolling moment
+        self.F_M[3] = (norm_const*self.b_w*C_ll)  # Aerodynamic rolling moment
         self.F_M[4] = (norm_const*self.c_w*Cm)  # Aerodynamic pitching moment
         self.F_M[5] = (norm_const*self.b_w*Cn)  # Aerodynamic yawing moment
         self.thrust(temp_vars)
@@ -502,6 +531,11 @@ class Aircraft:
         self.p_o = Omega*(-St)
         self.q_o = Omega*(Sp*Ct)
         self.r_o = Omega*(Cp*Ct)
+        self.controls[0] = self.de_o
+        self.controls[1] = self.da_o
+        self.controls[2] = self.dr_o
+        self.controls[3] = self.tau_o
+
 
     def climb_to_elevation(self, alpha, beta):
         SG = np.sin(self.climb)
