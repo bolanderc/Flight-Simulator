@@ -6,6 +6,7 @@ import numpy as np
 import graphics
 import aircraft
 import simulation
+import scipy.interpolate as interp
 
 
 class Panel:
@@ -14,8 +15,15 @@ class Panel:
         glClearColor(0.,0.,0.,0.0)
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
         self.pic = pygame.image.load("V-n diagram.png")
+        self.xscale = 8./5.
+        self.yscale = -150./8.
 
-    def draw(self):
+    def draw(self, load, velocity):
+        pos_x = int(75 + self.xscale*velocity)
+        pos_y = int(250 + self.yscale*load)
+        self.pic = pygame.image.load("V-n diagram.png")
+        self.dot = pygame.draw.circle(self.pic, pygame.color.THECOLORS["black"], (pos_x, pos_y), 4)
+
         pic = self.pic.copy()
 
         if self.screen_width:
@@ -72,6 +80,15 @@ def main():
     graphics_aircraft.set_orientation([0.,0.,0.,0.])
     graphics_aircraft.set_position([0.,0.,-500.])
 
+
+    graphics_pig = graphics.Mesh("res/pig_pilot.obj","shaders/aircraft.vs","shaders/aircraft.fs","res/Pig_texture.jpg",width,height)
+
+    graphics_fuselage = graphics.Mesh("res/Cessna_fuselage.obj","shaders/aircraft.vs","shaders/aircraft.fs","res/cessna_texture.jpg",width,height)
+
+    graphics_left = graphics.Mesh("res/Cessna_left_wing.obj","shaders/aircraft.vs","shaders/aircraft.fs","res/cessna_texture.jpg",width,height)
+
+    graphics_right = graphics.Mesh("res/Cessna_right_wing.obj","shaders/aircraft.vs","shaders/aircraft.fs","res/cessna_texture.jpg",width,height)
+
     #initialize HUD
     HUD = graphics.HeadsUp(width, height)
 
@@ -88,6 +105,13 @@ def main():
     a_obj = aircraft.Aircraft()
     dt = simulation.load_file('11.24_input.json', a_obj)
     simulation.initialize(a_obj)
+
+    pig = aircraft.Aircraft()
+    fuselage = aircraft.Aircraft()
+    dt = simulation.load_file('11.24_input.json', fuselage)
+    simulation.initialize(fuselage)
+    wing_ll = aircraft.Aircraft()
+    wing_r = aircraft.Aircraft()
 
     panel = Panel(width)
 
@@ -210,9 +234,17 @@ def main():
             # if joystick is being used, gets joystick input and creates control_state dicitonary
             if KEYBOARD == False:
                 a_obj.controls = [(joy.get_axis(4)**3)*-d_ele + a_obj.de_o,
-                                  (joy.get_axis(3)**3)*-d_ail,
-                                  (joy.get_axis(0)**3)*-d_rud,
-                                  (-joy.get_axis(1)+1.)*0.5]
+                                  (joy.get_axis(3)**3)*-d_ail + a_obj.da_o,
+                                  (joy.get_axis(0)**3)*-d_rud + a_obj.dr_o,
+                                  (-joy.get_axis(1)+1.)*a_obj.tau_o]
+                if a_obj.controls[3] > 1.0:
+                    a_obj.controls[3] = 1.0
+                fuselage.controls = [(joy.get_axis(4)**3)*-d_ele + fuselage.de_o,
+                                     (joy.get_axis(3)**3)*-d_ail + fuselage.da_o,
+                                     (joy.get_axis(0)**3)*-d_rud + fuselage.dr_o,
+                                     (-joy.get_axis(1)+1.)*fuselage.tau_o]
+                if fuselage.controls[3] > 1.0:
+                    fuselage.controls[3] = 1.0
 
 
             # if joystick is not being used, gets keyboard input and creates control_state dictionary
@@ -251,9 +283,23 @@ def main():
             #SIMULATION CALCULATIONS GO BELOW HERE FOR EACH TIME STEP
             #IT IS RECOMMENDED THAT YOU MAKE AN OBJECT FOR THE SIMULATION AIRCRAFT AND CREATE A FUNCTION IN SAID OBJECT TO CALCULATE THE NEXT TIME STEP.
             #THIS FUNCTION CAN THEN BE CALLED HERE
-            simulation.run_sim(a_obj, dt)
+            if a_obj.broken is False:
+                simulation.run_sim(a_obj, dt)
+                simulation.run_sim(fuselage, dt)
+            elif a_obj.broken is True and a_obj.t_broke == t:
+                pig.state_vars = a_obj.state_vars
+                simulation.wing_init(wing_ll, a_obj, left=True)
+                simulation.wing_init(wing_r, a_obj)
+                simulation.wing_plunge(pig, a_obj.t_broke)
+                simulation.run_sim(fuselage, dt)
+                simulation.wing_plunge(wing_ll, a_obj.t_broke)
+                simulation.wing_plunge(wing_r, a_obj.t_broke)
 
-
+            else:
+                simulation.wing_plunge(pig, a_obj.t_broke)
+                simulation.run_sim(fuselage, dt)
+                simulation.wing_plunge(wing_ll, a_obj.t_broke)
+                simulation.wing_plunge(wing_r, a_obj.t_broke)
 
 
             #INPUT POSITION, ORIENTATION, AND VELOCITY OF AIRCRAFT INTO THIS DICTIONARY WHICH WILL THEN UPDATE THE GRAPHICS
@@ -285,19 +331,79 @@ def main():
                 "Flaps":0.,#deg
                 "Axial G-Force":0. ,#g's
                 "Side G-Force":0. ,#g's
-                "Normal G-Force":0. ,#g's
+                "Normal G-Force": a_obj.load ,#g's
                 "Roll Rate": a_obj.p_o ,#deg/s
                 "Pitch Rate":a_obj.q_o ,#deg/s
                 "Yaw Rate":a_obj.r_o #deg/s
             }
 
-            #apply position and orientation to graphics
-            graphics_aircraft.set_orientation(graphics.swap_quat(aircraft_condition["Orientation"]))
-            graphics_aircraft.set_position(aircraft_condition["Position"])
+#            apply position and orientation to graphics
+            if a_obj.broken is True and a_obj.t_broke != 0.0:
+                fuselage_condition = {
+                "Position":fuselage.state_vars[6:9],#input position of form [x,y,z]
+                "Orientation":fuselage.state_vars[-4:],#input orientation in quaternion form [e0,ex,ey,ez]
+                "Velocity":fuselage.state_vars[:3] #input Velocity of form [u,v,w]
+                }
+                left_wing_condition = {
+                "Position":wing_ll.state_vars[6:9],#input position of form [x,y,z]
+                "Orientation":wing_ll.state_vars[-4:],#input orientation in quaternion form [e0,ex,ey,ez]
+                "Velocity":wing_ll.state_vars[:3] #input Velocity of form [u,v,w]
+                }
+                right_wing_condition = {
+                "Position":wing_r.state_vars[6:9],#input position of form [x,y,z]
+                "Orientation":wing_r.state_vars[-4:],#input orientation in quaternion form [e0,ex,ey,ez]
+                "Velocity":wing_r.state_vars[:3] #input Velocity of form [u,v,w]
+                }
+                pig_condition = {
+                "Position":pig.state_vars[6:9],#input position of form [x,y,z]
+                "Orientation":pig.state_vars[-4:],#input orientation in quaternion form [e0,ex,ey,ez]
+                "Velocity":pig.state_vars[:3] #input Velocity of form [u,v,w]
+                }
+#                crash_cam_condition = {}
+#                graphics_crash_cam
+                graphics_pig.set_orientation(graphics.swap_quat(pig_condition["Orientation"]))
+                graphics_pig.set_position(pig_condition["Position"])
+                graphics_fuselage.set_orientation(graphics.swap_quat(fuselage_condition["Orientation"]))
+                graphics_fuselage.set_position(fuselage_condition["Position"])
+                graphics_left.set_orientation(graphics.swap_quat(left_wing_condition["Orientation"]))
+                graphics_left.set_position(left_wing_condition["Position"])
+                graphics_right.set_orientation(graphics.swap_quat(right_wing_condition["Orientation"]))
+                graphics_right.set_position(right_wing_condition["Position"])
+                flight_data = {
+                    "Graphics Time Step": t,#sec
+                    "Physics Time Step": dt,#sec
+                    "Airspeed": pig.V_now,#feet/sec
+                    "AoA":180.0*pig.alpha_now/np.pi ,#deg
+                    "Sideslip": pig.beta_now ,#deg
+                    "Altitude":-pig.state_vars[8] ,#feet
+                    "Latitude":pig.state_vars[6] ,#deg
+                    "Longitude":pig.state_vars[7] ,#deg
+                    "Time":0. ,#sec
+                    "Bank":pig.bank ,#deg
+                    "Elevation":pig.elevation ,#deg
+                    "Heading":pig.heading ,#deg
+                    "Gnd Speed":pig.V_now ,#feet/sec
+                    "Gnd Track":0. ,#deg
+                    "Climb":pig.climb, #feet/min
+                    "Throttle":control_state["throttle"]*100 ,#%
+                    "Elevator":control_state["elevator"] ,#deg
+                    "Ailerons":control_state["aileron"] ,#deg
+                    "Rudder":control_state["rudder"] ,#deg
+                    "Flaps":0.,#deg
+                    "Axial G-Force":0. ,#g's
+                    "Side G-Force":0. ,#g's
+                    "Normal G-Force": pig.load ,#g's
+                    "Roll Rate": pig.p_o ,#deg/s
+                    "Pitch Rate":pig.q_o ,#deg/s
+                    "Yaw Rate":pig.r_o #deg/s
+                }
+            else:
+                graphics_aircraft.set_orientation(graphics.swap_quat(aircraft_condition["Orientation"]))
+                graphics_aircraft.set_position(aircraft_condition["Position"])
 
 
             #test game over conditions
-            if graphics_aircraft.position[2]>0.:
+            if graphics_aircraft.position[2]>0. or graphics_fuselage.position[2]>0.:
                 LOSE = True
 
 
@@ -313,13 +419,24 @@ def main():
             #Third person view
             elif FPV == False:
                 #get view matrix and render scene
-                view = cam.third_view(graphics_aircraft)
-                graphics_aircraft.set_view(view)
+                if a_obj.broken is True and a_obj.t_broke != 0.0:
+                    view = cam.third_view(graphics_left)
+                    graphics_left.set_view(view)
+                else:
+                    view = cam.third_view(graphics_aircraft)
+                    graphics_aircraft.set_view(view)
                 field.set_view(view)
 
-                graphics_aircraft.render()
+                if a_obj.broken is True and a_obj.t_broke != 0.0:
+                    graphics_fuselage.render()
+                    graphics_pig.render()
+                    graphics_left.render()
+                    graphics_right.render()
+                    panel.draw(fuselage.load, fuselage.V_now)
+                else:
+                    graphics_aircraft.render()
+                    panel.draw(a_obj.load, a_obj.V_now)
                 field.render()
-                panel.draw()
                 if DATA == True:
                     data.render(flight_data)
 
@@ -337,6 +454,8 @@ def main():
                 if DATA == True:
                     data.render(flight_data)
                 HUD.render(aircraft_condition,view)
+            if a_obj.broken is True:
+                a_obj.t_broke += t
 
 
 

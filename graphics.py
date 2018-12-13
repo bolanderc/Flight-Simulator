@@ -10,6 +10,76 @@ from pygame.locals import *
 from PIL import Image
 
 
+class Radar:
+    def __init__(self):
+        self.enemy_disp = Text(45)
+        self.projectile_disp = Text(45)
+        self.radar_surface = pygame.Surface((400,200))
+        self.radar_surface.set_colorkey((0,0,0))
+
+        self.radar_plane = pygame.transform.scale(pygame.image.load("res/radar_plane.png"),(20,20))
+        self.enemy_plane = pygame.transform.scale(pygame.image.load("res/radar_plane3.png"),(30,30))
+        self.projectiles = pygame.transform.scale(pygame.image.load("res/Rocket.png"),(10,30))
+
+    def draw(self, positions,heading,planes,projectiles,warning):
+        position = (-.2222,-1, 0)
+        color1 = (100,150,100,1)
+        color2 = (0,255,0,1)
+        color3 = (200,200,125,1)
+        color4 = (175,0,0,1)
+        color5 = (0,100,150,1)
+        color6 = (150,100,100,1)
+
+        self.enemy_disp.draw(0.14,-0.975,str(planes),(255,0,0,1))
+        self.projectile_disp.draw(-0.155,-0.975,str(projectiles),(0,0,255,1))
+
+        if warning:
+            pygame.draw.circle(self.radar_surface,color6,(200,100),100)
+        else:
+            pygame.draw.circle(self.radar_surface,color1,(200,100),100)
+
+        pygame.draw.circle(self.radar_surface,color2,(200,100),100,3)
+        pygame.draw.circle(self.radar_surface,color2,(200,100),75,1)
+        pygame.draw.circle(self.radar_surface,color2,(200,100),50,1)
+        pygame.draw.circle(self.radar_surface,color2,(200,100),25,1)
+        pygame.draw.line(self.radar_surface,color2,(100,100),(300,100),1)
+        pygame.draw.line(self.radar_surface,color2,(200,0),(200,200),1)
+
+        pygame.draw.line(self.radar_surface,color4,(200,100),self.rotate(0,-99,heading),2)
+
+        self.radar_surface.blit(self.radar_plane,(190,90))
+        self.radar_surface.blit(self.enemy_plane,(295,150))
+        self.radar_surface.blit(self.projectiles,(82,150))
+
+        v_x, v_y, v_z = positions
+
+        for x,y,z in zip(v_x[1:],v_y[1:],v_z[1:]):
+            r1 = int((y-v_y[0])/100)
+            r2 = -int((x-v_x[0])/100)
+            r3 = v_z[0]-z
+
+            r = np.sqrt(r1*r1 + r2*r2)
+
+            if r3 > 0:
+                color = color5
+            else:
+                color = color3
+
+            if r < 95:
+                pygame.draw.circle(self.radar_surface,color,self.rotate(r1,r2,heading),5)
+            else:
+                pygame.draw.line(self.radar_surface,color,self.rotate(r1*97/r,r2*97/r,heading),self.rotate(r1*85/r,r2*85/r,heading),4)
+
+
+        textData = pygame.image.tostring(self.radar_surface, "RGBA", True)
+
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)
+        glRasterPos3d(*position)
+        glDrawPixels(self.radar_surface.get_width(), self.radar_surface.get_height(),GL_RGBA, GL_UNSIGNED_BYTE, textData)
+        glDisable(GL_BLEND)
+
+
 def _load_shader(shader_file):
     shader_source = ""
     with open(shader_file) as f:
@@ -69,7 +139,7 @@ def quatProd(A, B):
     c = A[0]*B[2]-A[1]*B[3]+A[2]*B[0]+A[3]*B[1]
     d = A[0]*B[3]+A[1]*B[2]-A[2]*B[1]+A[3]*B[0]
     return [a,b,c,d]
-	 
+
 
 #returns quaterion conjugate
 def quatConj(e):
@@ -234,23 +304,23 @@ class Mesh:
         glBindTexture(GL_TEXTURE_2D, 0)
         glUseProgram(0)
         glBindVertexArray(0)
-		
+
 class Text:
     def __init__(self, size):
-        self.font = pygame.font.Font(None, size) 
+        self.font = pygame.font.Font(None, size)
 
-    def draw(self, x, y, text, color = None):                                                
-        position = (x, y, 0)  
-        if color:        
-            textSurface = self.font.render(text, True, color)   
-        else:                                             
-            textSurface = self.font.render(text, True, (0,0,0,1))                                     
-        textData = pygame.image.tostring(textSurface, "RGBA", True) 
+    def draw(self, x, y, text, color = None):
+        position = (x, y, 0)
+        if color:
+            textSurface = self.font.render(text, True, color)
+        else:
+            textSurface = self.font.render(text, True, (0,0,0,1))
+        textData = pygame.image.tostring(textSurface, "RGBA", True)
 
-        glEnable(GL_BLEND) 
-        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)           
-        glRasterPos3d(*position)                                                
-        glDrawPixels(textSurface.get_width(), textSurface.get_height(),GL_RGBA, GL_UNSIGNED_BYTE, textData) 
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)
+        glRasterPos3d(*position)
+        glDrawPixels(textSurface.get_width(), textSurface.get_height(),GL_RGBA, GL_UNSIGNED_BYTE, textData)
         glDisable(GL_BLEND)
 
 
@@ -379,7 +449,7 @@ class HeadsUp:
         self.flightPath.set_orientation(swap_quat(orientation_b))
 
         #calculate changes in pitch ladder and compass positions
-        euler = eulFromQuat(orientation_b)			
+        euler = eulFromQuat(orientation_b)
         self.ladder.set_position(cam_position)
         self.ladder.set_orientation_z(euler[0])
         self.compass.set_position([-euler[0]*0.2,-0.22,-0.75])
@@ -423,7 +493,7 @@ class Frame:
                        0.5*x, -0.5*y, 0.0, 1.0, 0.0,
                        0.5*x,  0.5*y, 0.0, 1.0, 1.0,
                       -0.5*x,  0.5*y, 0.0, 0.0, 1.0]
-	
+
         self.plane = np.array(self.plane, dtype=np.float32)
 
         self.plane_indices = [0, 1, 2, 2, 3, 0]
@@ -490,7 +560,7 @@ class Frame:
         glBindTexture(GL_TEXTURE_2D, self.texture)
         glUseProgram(self.shader)
         glDrawElements(GL_TRIANGLES, len(self.plane_indices), GL_UNSIGNED_INT, None)
-        glUseProgram(0)		
+        glUseProgram(0)
         glBindVertexArray(0)
 
 class Camera:
@@ -507,7 +577,7 @@ class Camera:
 
         Parameters
         ----------
-        graphics_aircraft: graphics_aircraft object used in graphics 
+        graphics_aircraft: graphics_aircraft object used in graphics
 
         Returns
         -------
@@ -525,7 +595,7 @@ class Camera:
         to_camera = [-70.,0.,-5.]
         quat_orientation = [graphics_aircraft.orientation[3], graphics_aircraft.orientation[0], graphics_aircraft.orientation[1], graphics_aircraft.orientation[2]]
         graphics_aircraft_to_camera = Body2Fixed(to_camera, quat_orientation)
-		
+
         cam_up = [0.,0.,-1.]
         rotated_cam_up = Body2Fixed(cam_up,quat_orientation)
 
@@ -535,7 +605,7 @@ class Camera:
 
         #latency. stores position, target, and up in lists and pulls out and uses old values to create a delayed effect
         delay = 5
-	
+
         if len(self.pos_storage)<=delay:
             self.camera_pos = self.pos_storage[0]
             self.camera_up = self.up_storage[0]
@@ -546,14 +616,14 @@ class Camera:
             self.camera_up = self.up_storage.pop(0)
             self.target = self.target_storage.pop(0)
 
-        return self.look_at(self.camera_pos, self.target, self.camera_up)	
+        return self.look_at(self.camera_pos, self.target, self.camera_up)
 
     def cockpit_view(self, graphics_aircraft):
         """creates view matrix such that camera is positioned at the graphics_aircraft location, as if in the cockpit
 
         Parameters
         ----------
-        graphics_aircraft: graphics_aircraft object used in graphics 
+        graphics_aircraft: graphics_aircraft object used in graphics
 
         Returns
         -------

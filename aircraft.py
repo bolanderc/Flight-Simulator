@@ -8,6 +8,8 @@ Created on Wed Nov  7 16:10:15 2018
 import numpy as np
 import quat
 import sinesummationpredictivefit as sspf
+import matplotlib.pyplot as plt
+import stdatmos
 
 
 class Aircraft:
@@ -86,6 +88,7 @@ class Aircraft:
         self.Cn_dr = 0.0  # Reference dYawing Moment/drudder
         self.F_M = np.zeros(6)  # Aerodynamic forces/moments (Fx->Fz,Mx->Mz)
         self.T_F_M = np.zeros(6)  # Thrust forces/moments
+        self.load = 0.0
 
         # Initial orientation
         self.elevation = 0.0  # Initial elevation angle (calculated)
@@ -218,6 +221,8 @@ class Aircraft:
 
         self.n_pll = 0.0
         self.n_nll = 0.0
+        self.broken = False
+        self.t_broke = 0.0
 
     def eq_o_st(self, t, y0):
         """Describes the equation of state for the aircraft.
@@ -362,8 +367,21 @@ class Aircraft:
                 Cm = -0.6
                 Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
                       (self.Cn_p/self.CL_ref)*CL*pbar + Cnconst)
-
-        print(alpha, CL, CD, Cm)
+        self.load = float(0.5*self.rho*(V**2)*CL/(self.W/self.S_w))
+        if self.broken:
+            CL = 0.1
+            if CDconst + dragmod > 2.0:
+                CD = 2.0
+            else:
+                CD = CDconst + dragmod
+            C_ll = Cllconst + (self.Cll_r/self.CL_ref)*CL*rbar
+            Cm = -0.6
+            Cn = ((self.Cn_b/self.CY_b)*(CS*u/V - CD*v/V) +
+                  (self.Cn_p/self.CL_ref)*CL*pbar + Cnconst)
+        if not self.broken:
+            if self.load > 4.0 or self.load < -2.0:
+                self.broken = True
+#        print(alpha, CL, CD, Cm)
         self.F_M[0] = (norm_const*(CL*np.sin(alpha) - CS*np.sin(beta) -
                        CD*u/V))  # X aerodynamic force
         self.F_M[1] = (norm_const*(CS*np.cos(beta) -
@@ -392,14 +410,17 @@ class Aircraft:
             X-thrust, Y-thrust, Z-thrust, X-thrust moment, Y-thrust moment,
             Z-thrust moment.
         """
-        V = np.sqrt(temp_vars[0]**2 + temp_vars[1]**2 + temp_vars[2]**2)
-        thrust = (self.T0 + self.T1*V + self.T2*(V**2))
-        self.T_F_M[0] = (self.controls[3]*(self.rho/self.rho_0)**self.a)*thrust
-        self.T_F_M[1] = 0.0
-        self.T_F_M[2] = 0.0
-        self.T_F_M[3] = self.y_T_o*self.T_F_M[2] - self.z_T_o*self.T_F_M[1]
-        self.T_F_M[4] = self.z_T_o*self.T_F_M[0] - self.x_T_o*self.T_F_M[2]
-        self.T_F_M[5] = self.x_T_o*self.T_F_M[1] - self.y_T_o*self.T_F_M[0]
+        if self.broken is True:
+            self.T_F_M[:] = 0.0
+        else:
+            V = np.sqrt(temp_vars[0]**2 + temp_vars[1]**2 + temp_vars[2]**2)
+            thrust = (self.T0 + self.T1*V + self.T2*(V**2))
+            self.T_F_M[0] = (self.controls[3]*(self.rho/self.rho_0)**self.a)*thrust
+            self.T_F_M[1] = 0.0
+            self.T_F_M[2] = 0.0
+            self.T_F_M[3] = self.y_T_o*self.T_F_M[2] - self.z_T_o*self.T_F_M[1]
+            self.T_F_M[4] = self.z_T_o*self.T_F_M[0] - self.x_T_o*self.T_F_M[2]
+            self.T_F_M[5] = self.x_T_o*self.T_F_M[1] - self.y_T_o*self.T_F_M[0]
 
     def trim(self):
         Vo = self.V_o
@@ -604,5 +625,42 @@ class Aircraft:
         self.geo_quat = (np.cos(self.del_heading/2)*self.state_vars[-4:] +
                          np.sin(self.del_heading/2)*flat_transform)
 
-#    def load_calc(self):
-
+    def V_ndiagram(self):
+        V = np.arange(0, 301, 1)
+        rho = stdatmos.statee(self.state_vars[8])[3]
+        Sw = self.S_w
+        W = self.W
+        CL_max = 1.4
+        CL_min = -0.9
+        nmax_s = (0.5*rho*V**2*CL_max)/(W/Sw)
+        nmin_s = (0.5*rho*V**2*CL_min)/(W/Sw)
+        nll = np.full(len(V), -2.0)
+        pll = np.full(len(V), 4.0)
+        vlim = np.full(1000, 250)
+        glim = np.linspace(-2.0, 4.0, num=1000, endpoint=True)
+        pll_lim = nmax_s > pll
+        pll_n = pll[pll_lim]
+        nll_lim = nmin_s < nll
+        nll_n = nll[nll_lim]
+        vskip = np.arange(250, 301, 1)
+        npskip = np.full(len(vskip), -2.0)
+        nnskip = np.full(len(vskip), 4.0)
+        plt.figure(4)
+        plt.plot(V, nmax_s, 'k', linestyle='--', label='Stall Limit')
+        plt.plot(V, nmin_s, 'k', linestyle='--')
+        plt.plot(V[pll_lim], pll_n, 'k', label='Load Limit')
+        plt.plot(V[nll_lim], nll_n, 'k')
+        plt.plot(vlim, glim, 'k')
+        plt.plot(vskip, npskip, 'w')
+        plt.plot(vskip, nnskip, 'w')
+        plt.xlim((0, 300))
+        plt.ylim((-8, 8))
+        plt.xlabel('Velocity (ft/s)')
+        plt.ylabel('Load Factor')
+        plt.legend(loc='upper left')
+        plt.text(50, -3.5, 'Stall')
+        plt.text(125, 0.5, 'Allowable Flight Envelope')
+        plt.text(255, 1, 'Structural')
+        plt.text(255, 0, 'Damage')
+        plt.text(50, 3.5, 'Stall')
+        plt.savefig('V-n diagram.png', dpi=100)

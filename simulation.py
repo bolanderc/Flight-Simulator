@@ -93,6 +93,22 @@ def initialize(a_obj):
     a_obj.state_vars[3] = a_obj.p_o
     a_obj.state_vars[4] = a_obj.q_o
     a_obj.state_vars[5] = a_obj.r_o
+    a_obj.V_ndiagram()
+
+
+def wing_init(wing, a_obj, left=False, pig=False):
+    wing.state_vars = np.copy(a_obj.state_vars)
+    if left is False:
+        wing.state_vars[7] += a_obj.b_w/2.0
+    elif left is True:
+        wing.state_vars[7] -= a_obj.b_w/2.0
+
+
+def save_the_pig(pig, t):
+    if t < 2.0:
+        pig.state_vars[8] -= 32.2*4*t**2
+    else:
+        pig.state_vars[8] += 32.2*t**2
 
 
 def run_sim(a_obj, dt):
@@ -105,3 +121,11 @@ def run_sim(a_obj, dt):
                           a_obj.state_vars[2]**2)
     a_obj.alpha_now = np.arctan2(a_obj.state_vars[2], a_obj.state_vars[0])
     a_obj.beta_now = np.arctan2(a_obj.state_vars[1], a_obj.state_vars[0])
+
+
+def wing_plunge(wing, t):
+#    orientation = quat.Euler2Quat(wing.state_vars[-4:])
+#    orientation
+    wing.state_vars[6] = np.cos(t)
+    wing.state_vars[7] = np.sin(t)
+    wing.state_vars[8] += 32.2*t**2
